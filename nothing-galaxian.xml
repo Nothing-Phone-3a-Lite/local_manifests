@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Nothing Phone (3a) Lite / Galaxian - every project that lives in the
+  Nothing-Phone-3a-Lite org.
+
+  This repo is checked out at .repo/local_manifests on the build host, so repo
+  picks this file up automatically alongside the main manifest. See README.md.
+
+  The remote is declared here with a dedicated name ("n3al") so it cannot
+  collide with the "github" remote already defined in the main manifest.
+
+  The five packages/apps projects are optional-ish: they are guarded in the
+  device tree with wildcard / inherit-product-if-exists, so a missing project
+  degrades instead of failing - but then the glyph apps, the Nothing Gallery or
+  the camera overrides are simply gone.
+
+  The other six are hard requirements that fail the build outright if missing:
+    hardware/dolby                     inherit-product (not -if-exists)
+    device/nothing/Galaxian-kernel     supplies Image.lz4, uapi headers, dtb
+    vendor/nothing/Galaxian            BoardConfigVendor.mk + Galaxian-vendor.mk
+    device/mediatek/sepolicy_vndr      include .../SEPolicy.mk
+    hardware/mediatek                  include / inherit-product in device.mk
+    device/nothing/Galaxian            the device tree itself (see below)
+-->
+<manifest>
+  <remote name="n3al"
+          fetch="https://github.com/Nothing-Phone-3a-Lite"
+          revision="main" />
+
+  <!-- Glyph: the ParanoidGlyph app (Galaxian variant) and the Nothing
+       third-party AIDL adapter. ParanoidGlyph links against IGlyphService-java,
+       which GlyphAdapter provides, so both must be present. -->
+  <project path="packages/apps/ParanoidGlyph" name="packages_apps_ParanoidGlyph" remote="n3al" />
+  <project path="packages/apps/GlyphAdapter"   name="packages_apps_GlyphAdapter"   remote="n3al" />
+
+  <!-- GalaxianParts: the device settings / tuning app. -->
+  <project path="packages/apps/GalaxianParts"  name="packages_apps_GalaxianParts"  remote="n3al" />
+
+  <!-- NTGallery: the merged Nothing Gallery 3.1.2.0819 prebuilt. -->
+  <project path="packages/apps/NTGallery"      name="packages_apps_NTGallery"      remote="n3al" />
+
+  <!-- NTCamera: patches, feature overrides, framework shims, APU GID and the
+       Nothing camera HAL policy. -->
+  <project path="packages/apps/NTCamera"       name="packages_apps_NTCamera"       remote="n3al" />
+
+  <!-- hardware/dolby: the Dolby Atmos stack (DSP volume sync, codec configs,
+       vendor sepolicy, FCM fragment). The device tree does
+       "inherit-product hardware/dolby/dolby.mk" and adds the DolbyAtmos module,
+       which this repo defines in DolbyAtmos/Android.bp.
+
+       NOTE: this repo has no "main" branch - the revision override is required,
+       otherwise it would inherit the remote's default revision="main" above.
+       Branches: 17 (default, in use), 16, rewrite. -->
+  <project path="hardware/dolby" name="hardware_dolby" remote="n3al" revision="17" />
+
+  <!-- The prebuilt kernel tree. BoardConfig.mk sets
+         DEVICE_PATH  := device/nothing/Galaxian
+         KERNEL_PATH  := $(DEVICE_PATH)-kernel
+       and reads TARGET_PREBUILT_KERNEL (Image.lz4), the uapi headers tarball
+       and dtb/ from there - so the checkout path must be exactly
+       device/nothing/Galaxian-kernel, which is why the repo was renamed to
+       match on the way into the org.
+
+       NOTE: like hardware/dolby, this repo has no "main" branch - the revision
+       override is required. Branches: origin-kernel (default, in use),
+       lineage-23.2, vanilla. -->
+  <project path="device/nothing/Galaxian-kernel" name="device_nothing_Galaxian-kernel" remote="n3al" revision="origin-kernel" />
+
+  <!-- The vendor blob tree (~940 MB, the org's largest). device.mk does
+         inherit-product vendor/nothing/Galaxian/Galaxian-vendor.mk
+       and BoardConfig.mk does
+         include vendor/nothing/Galaxian/BoardConfigVendor.mk
+       so both the checkout path and the capitalisation are mandatory.
+
+       NOTE: like hardware/dolby and the kernel tree, this repo has no "main"
+       branch - the revision override is required. Branches: lineage-24.0
+       (default, in use), lineage-23.2, lineage-24.0-ntcam.
+
+       BRANCH PAIRING (resolved): lineage-24.0-ntcam used to be the only branch
+       carrying NTCamera.apk, NTGallery.apk and the camera libs, which made the
+       device tree's plain lineage-24.0 line unbuildable. lineage-24.0 was
+       fast-forwarded onto the ntcam tip (both now at bd9e949), so this single
+       revision serves both device-tree lines and no pairing is required. -->
+  <project path="vendor/nothing/Galaxian" name="proprietary_vendor_nothing_Galaxian" remote="n3al" revision="lineage-24.0" />
+
+  <!-- MTK vendor sepolicy overlay. BoardConfig.mk does
+         include device/mediatek/sepolicy_vndr/SEPolicy.mk
+       and SEPolicy.mk itself sets
+         MTK_SEPOLICY_PATH := device/mediatek/sepolicy_vndr
+       then feeds basic/, bsp/, legacy/ and modem/ into
+       BOARD_VENDOR_SEPOLICY_DIRS / SYSTEM_EXT_{PRIVATE,PUBLIC}_SEPOLICY_DIRS - so
+       both the checkout path and the repo name are load-bearing.
+
+       This is a standalone mirror (not a fork) of
+       Andreyka445/device_mediatek_sepolicy_vndr, which is itself a fork of
+       nothing-galaga/android_device_mediatek_sepolicy_vndr. The local clone
+       keeps the source as a remote named "upstream" for pulling future fixes.
+
+       Branches: lineage-24.0 (default, in use), lineage-23.2. -->
+  <project path="device/mediatek/sepolicy_vndr" name="device_mediatek_sepolicy_vndr" remote="n3al" revision="lineage-24.0" />
+
+  <!-- MTK hardware repo. The device tree references it unguarded in several
+       places, e.g.
+         device.mk:214  include hardware/mediatek/configs/properties/vendor_logtag.mk
+         device.mk:283  inherit-product hardware/mediatek/frameworks/mediatek-frameworks.mk
+         BoardConfig.mk:227  .../vintf/mediatek_framework_compatibility_matrix.xml
+       plus PRODUCT_PACKAGES += hardware/mediatek and .../libmtkperf_client.
+
+       This one is a real fork (parent LineageOS/android_hardware_mediatek), which
+       is deliberate - it keeps the upstream link usable for pulling LineageOS
+       fixes. Branches: lineage-24.0 (default, in use), lineage-23.2. -->
+  <project path="hardware/mediatek" name="hardware_mediatek" remote="n3al" revision="lineage-24.0" />
+
+  <!-- The AOSP/Lineage patch set. NOT a build project - nothing includes or
+       inherits it - but the ROM will not boot, flash or record 60 FPS video
+       without it, so it is synced in for convenience and applied to the other
+       checkouts afterwards.
+
+       Each top-level dir maps to a project path with "/" written as "__":
+         frameworks__base         -> frameworks/base
+         packages__apps__Aperture -> packages/apps/Aperture
+         system__core             -> system/core
+         system__fs__fs_mgr       -> system/fs/fs_mgr
+
+       Usage (from the tree root, after a sync):
+         python3 patches/apply.py patches $PWD
+
+       It runs "git am" inside each target dir, so it needs a clean, already
+       synced tree. On conflict it stops and prints the "git am" recovery
+       commands to run by hand.
+
+       Path "patches" is safe: no AOSP project claims it. Default branch is
+       "master" (not "main"), so the revision is explicit. -->
+  <project path="patches" name="patches" remote="n3al" revision="master" />
+
+  <!-- The device tree itself, now owned by the org as well.
+       NOTE: a project path may only be declared once across the main manifest
+       and every local manifest - a duplicate path is a hard error. So either
+       delete the existing device/nothing/Galaxian entry from wherever it is
+       declared today and uncomment this, or leave this commented and just edit
+       that entry's remote/name to point at the org. GitHub redirects the old
+       URL, so a checkout that still names the old owner keeps working either
+       way.
+
+       The revision MUST be lineage-24.0-repos, not lineage-24.0: the plain
+       branch still carries the apps at app/parts, glyph/*, nt-fwk/ and
+       blob-patches/, which is a different layout from the packages/apps/*
+       projects declared above. See README.md. -->
+  <!--
+  <project path="device/nothing/Galaxian" name="device_nothing_Galaxian" remote="n3al" revision="lineage-24.0-repos" />
+  -->
+</manifest>
